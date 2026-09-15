@@ -2,9 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { getViajes } = require('../models/storage');
 
-router.get('/ping', (req, res) => {
-    res.status(200).send('pong');
-});
 
 router.get('/viajes', (req, res) => {
   res.status(200).json(getViajes());
