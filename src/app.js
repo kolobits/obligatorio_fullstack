@@ -1,28 +1,42 @@
 require("dotenv").config();
 const express = require('express');
-const app = express();
-const port = 3000;
-const router = require('./routes/index');
-const publicRoutes = require('./routes/public.routes');
-const authRoutes = require('./routes/auth.routes');
-const cors = require('cors');
 const morgan = require('morgan');
+const cors = require('cors');
+const app = express();
+
+const privateRouter = require('./routes/private.router');
+const publicRouter = require('./routes/public.router');
+const authRouter = require('./routes/auth.router');
 const loggerMiddleware = require('./middlewares/loggerMiddleware');
 const authMiddleware = require('./middlewares/authMiddleware');
+const { generalLimiter } = require("./middlewares/rateLimit.middleware");
+const connectMongoDB = require("./models/mongo.client");
 
-app.use(cors());
+(async () => {
+  try {
+    await connectMongoDB();
+  } catch (error) {
+    console.log("Ocurrio un error", error);
+    process.exit();
+  }
+})();
+
 app.use(express.json());
-app.use(morgan('dev'));
 app.use(loggerMiddleware);
+app.use(morgan('dev'));
+app.use(cors());
 
-app.use('/', publicRoutes);
-app.use('/v1/auth', authRoutes);
+app.use(generalLimiter);
+
+app.use('/', publicRouter);
+app.use('/v1/auth', authRouter);
 
 app.use(authMiddleware);
 
-app.use('/v1', router);
+app.use('/v1', privateRouter);
 
 
-app.listen(port, () => {
-  console.log(`Listen & serve PORT: ${port}`);
+const PORT = process.env.PORT;
+app.listen(PORT, () => {
+  console.log(`Listen & serve PORT: ${PORT}`);
 });
