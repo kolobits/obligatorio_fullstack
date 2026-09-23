@@ -1,23 +1,19 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-const logDir = path.join(__dirname, '../logs');
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir, { recursive: true });
-}
+const logRequest = (req) => {
+  const now = new Date();
+  const [date] = now.toISOString().split("T");
+  const logDir = path.join(__dirname, "logs");
+  const logFile = path.join(logDir, `${date}.log`);
 
-const logRequest = (method, path, status) => {
-    const now = new Date();
-    const [date, time] = now.toISOString().split("T");
-    const logFile = `${logDir}/${date}.log`;
-    const logLine= `[${date}${time.split(".")[0]}] METHOD: ${method} ${path} - STATUS: ${status} \n`;
-    fs.appendFile(logFile, logLine, (error) => {
-        if (error) {
-            console.error("Error al escribir el log: ", error);
-        }
-    })
-}
+  const logMessage = `[${now.toISOString()}] METHOD: ${req.method} ${
+    req.url
+  } \n`;
 
-module.exports = {
-    logRequest
-}
+  fs.appendFile(logFile, logMessage, (err) => {
+    if (err) console.error("Error writing log: ", err);
+  });
+};
+
+module.exports = logRequest;
