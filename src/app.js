@@ -1,3 +1,13 @@
+// Fix: en algunas redes, la consulta DNS tipo SRV que necesita
+// "mongodb+srv://" no se resuelve bien (da ECONNREFUSED en querySrv).
+// Force a Node a resolver DNS contra Google/Cloudflare en vez del
+// DNS que da la red local, solo para este proceso.
+const dns = require("dns");
+dns.setServers(["8.8.8.8", "1.1.1.1"]);
+
+require("dotenv").config();
+
+
 require("dotenv").config();
 const express = require('express');
 const morgan = require('morgan');

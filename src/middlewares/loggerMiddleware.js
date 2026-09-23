@@ -1,10 +1,8 @@
-const { logRequest } = require('../utils/logger');
+const logRequest = require("../utils/logger");
 
 const loggerMiddleware = (req, res, next) => {
-    res.on('finish', () => {
-        logRequest(req.method, req.path, res.statusCode);
-    });
+    logRequest(req);
     next();
-}
+};
 
 module.exports = loggerMiddleware;
