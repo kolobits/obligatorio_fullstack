@@ -1,18 +1,32 @@
 const mongoose = require("mongoose");
 
-const connectMongoDB = async () => {
-    const MONGODB_CONNECTION_STRING = process.env.MONGODB_CONNECTION_STRING;
-    const MONGODB_DATABASE_NAME = process.env.MONGODB_DATABASE_NAME;
-    const MONGODB_CONNECTION_TIMEOUT = process.env.MONGODB_CONNECTION_TIMEOUT;
+let connectionPromise = null;
 
-    try {
-        await mongoose.connect(`${MONGODB_CONNECTION_STRING}/${MONGODB_DATABASE_NAME}`,{
-            serverSelectionTimeoutMS:MONGODB_CONNECTION_TIMEOUT
-        });
-        console.log("Conexion a mongo db establecida correctamente");
-    } catch (error) {
-        console.error("Ocurrio un error al conectarse a MongoDB", error);
+const connectMongoDB = async () => {
+
+    if(mongoose.connection.readyState === 1){
+        return mongoose.connection;
     }
+
+    if(!connectionPromise){
+        const MONGODB_CONNECTION_STRING = process.env.MONGODB_CONNECTION_STRING;
+        const MONGODB_DATABASE_NAME = process.env.MONGODB_DATABASE_NAME;
+        const MONGODB_CONNECTION_TIMEOUT = process.env.MONGODB_CONNECTION_TIMEOUT;
+
+        connectionPromise = mongoose.connect(`${MONGODB_CONNECTION_STRING}/${MONGODB_DATABASE_NAME}`,{
+                serverSelectionTimeoutMS:MONGODB_CONNECTION_TIMEOUT
+            })
+            .then((conn) => {
+                console.log("Conexion a mongo db establecida correctamente");
+                return conn;
+            })
+            .catch ((error) => {
+            console.error("Ocurrio un error al conectarse a MongoDB", error);
+            connectionPromise = null;
+            throw error;
+        })
+    }
+    return connectionPromise;
 };
 
 

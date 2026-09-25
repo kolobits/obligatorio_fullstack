@@ -1,8 +1,13 @@
 const logRequest = require("../utils/logger");
-
-const loggerMiddleware = (req, res, next) => {
-    logRequest(req);
-    next();
+/**
+ * LoggerMiddleware
+ * @param {*} req
+ * @param {*} res
+ * @param {*} next
+ */
+const loggerMiddleWare = (req, res, next) => {
+  logRequest(req);
+  next();
 };
 
-module.exports = loggerMiddleware;
+module.exports = loggerMiddleWare;
