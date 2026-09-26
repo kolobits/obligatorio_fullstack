@@ -23,4 +23,9 @@ const askGeminiFlash = async (prompt) => {
     return response.data;
 };
 
-module.exports = { askGeminiFlash };
+const extraerTexto = (data) => {
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    return parts.find((p) => p.text)?.text || "";
+};
+
+module.exports = { askGeminiFlash, extraerTexto };
