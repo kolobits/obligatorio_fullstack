@@ -24,6 +24,70 @@ const { askGeminiFlash, extraerTexto } = require("../services/gemini.service");
 const LIMITE_VIAJES_PLUS = 4;
 const MAX_DIAS_PRONOSTICO = 16;
 
+const TIPOS_INDOOR_ITINERARIO = new Set(["museum", "gallery", "aquarium"]);
+
+const seleccionarDiversificado = (puntos, cantidad) => {
+  const porTipo = new Map();
+  for (const p of puntos) {
+    if (!porTipo.has(p.tipo)) porTipo.set(p.tipo, []);
+    porTipo.get(p.tipo).push(p);
+  }
+  const grupos = [...porTipo.values()];
+
+  const seleccion = [];
+  let ronda = 0;
+  while (seleccion.length < cantidad && grupos.some((g) => ronda < g.length)) {
+    for (const grupo of grupos) {
+      if (seleccion.length >= cantidad) break;
+      if (grupo[ronda]) seleccion.push(grupo[ronda]);
+    }
+    ronda++;
+  }
+
+  return seleccion
+    .sort((a, b) => b.importancia - a.importancia || a.distanciaKm - b.distanciaKm)
+    .slice(0, cantidad);
+};
+
+const armarItinerarioPorDia = (dias, lugares) => {
+  const pool = [...lugares];
+  const resultado = dias.map((dia) => ({ ...dia, lugares: [] }));
+
+  if (resultado.length === 0) return resultado;
+
+  let cursor = 0;
+  while (pool.length > 0) {
+    const dia = resultado[cursor % resultado.length];
+    let idx = -1;
+
+    if (dia.lluvioso === true) {
+      idx = pool.findIndex((l) => TIPOS_INDOOR_ITINERARIO.has(l.tipo));
+    } else if (dia.lluvioso === false) {
+      idx = pool.findIndex((l) => !TIPOS_INDOOR_ITINERARIO.has(l.tipo));
+    }
+    if (idx === -1) idx = 0;
+
+    dia.lugares.push({ ...pool.splice(idx, 1)[0], fecha: dia.fecha });
+    cursor++;
+  }
+
+  return resultado;
+};
+
+const _diasDelViaje = (fechaInicio, fechaFin) => {
+  const dias = [];
+  const cursor = new Date(fechaInicio);
+  cursor.setHours(0, 0, 0, 0);
+  const fin = new Date(fechaFin);
+  fin.setHours(0, 0, 0, 0);
+
+  while (cursor <= fin) {
+    dias.push({ fecha: cursor.toISOString().split("T")[0], lluvioso: null });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dias;
+};
+
 const getViajesController = async (req, res) => {
   const { id } = req.user;
   const page = parseInt(req.query.page) || 1;
@@ -136,39 +200,105 @@ const getClimaViajeController = async (req, res) => {
     const fechaInicioStr = viaje.fechaInicio.toISOString().split("T")[0];
     const fechaFinStr = viaje.fechaFin.toISOString().split("T")[0];
 
-    const usuario = await findUserById(id);
     const puntos = await getPuntosDeInteres(
       coordenadas.latitude,
       coordenadas.longitude,
     );
-    const lugaresDestacados = puntos.slice(0, 3);
+    const lugaresDestacados = seleccionarDiversificado(puntos, 5);
 
     let recomendacion = null;
     let recorrido = null;
 
-    const armarRecorrido = async () => {
-      if (usuario.perfil === "premium" && lugaresDestacados.length > 1) {
+    const armarRecorrido = async (lugaresEnOrden) => {
+      if (lugaresEnOrden.length > 1) {
         const puntosRuta = [
           { latitude: coordenadas.latitude, longitude: coordenadas.longitude },
-          ...lugaresDestacados,
+          ...lugaresEnOrden,
         ];
         recorrido = await getRutaConParadas(puntosRuta);
       }
     };
 
-    if (diasHastaInicio <= MAX_DIAS_PRONOSTICO) {
-      const pronostico = await getPronostico(
+    const responderConHistorico = async () => {
+      const historico = await getHistoricoPorAnios(
         coordenadas.latitude,
         coordenadas.longitude,
         fechaInicioStr,
         fechaFinStr,
       );
+      const resumen = resumirHistorico(historico);
+
+      const dias = _diasDelViaje(viaje.fechaInicio, viaje.fechaFin);
+      const itinerarioPorDia = armarItinerarioPorDia(dias, lugaresDestacados);
+      const lugaresOrdenados = itinerarioPorDia.flatMap((d) => d.lugares);
 
       try {
-        const nombresLugares = lugaresDestacados
-          .map((p) => `${p.nombre} (${p.tipo})`)
-          .join(", ");
-        const prompt = `Sos un asistente de viajes. Este es el pronóstico diario para ${coordenadas.nombre} entre ${fechaInicioStr} y ${fechaFinStr} (temperaturas máx/mín en °C, precipitación en mm): ${JSON.stringify(pronostico)}. Estos son lugares de interés reales cerca del destino: ${nombresLugares}. Armá una recomendación breve (máximo 4 líneas, en español) de qué día conviene visitar cuál de esos lugares según el clima (aire libre si está despejado, bajo techo si llueve), mencionando la temperatura o condición que lo justifica. Usá solo los lugares de la lista, no inventes otros.`;
+        const asignacion = itinerarioPorDia
+          .map((d) => `${d.fecha}: ${d.lugares.map((l) => l.nombre).join(", ") || "sin plan puntual"}`)
+          .join(" | ");
+        const prompt = `Sos un asistente de viajes. El viaje a ${coordenadas.nombre} es dentro de ${diasHastaInicio} días, muy lejos para un pronóstico exacto. Historial de los últimos ${resumen.aniosAnalizados} años para estas fechas: máxima promedio ${resumen.temperaturaMaximaPromedio}°C, mínima promedio ${resumen.temperaturaMinimaPromedio}°C, probabilidad histórica de lluvia ${resumen.probabilidadDeLluvia}%. Ya se repartieron estos lugares de interés reales entre los días del viaje: ${asignacion}. Escribí una estimación breve del clima esperable (aclarando que es histórico, no exacto) y comentá brevemente por qué conviene ese reparto. No cambies el reparto ni inventes otros lugares.`;
+        const data = await askGeminiFlash(prompt);
+        recomendacion = extraerTexto(data);
+      } catch (error) {
+        console.error(
+          "Error al pedir estimación a Gemini:",
+          error?.response?.data || error.message,
+        );
+      }
+
+      await armarRecorrido(lugaresOrdenados);
+
+      return res.status(200).json({
+        tipo: "estimacion_historica",
+        destino: coordenadas.nombre,
+        destinoCoordenadas: {
+          latitude: coordenadas.latitude,
+          longitude: coordenadas.longitude,
+        },
+        resumenHistorico: resumen,
+        recomendacion,
+        lugaresDestacados: lugaresOrdenados,
+        itinerarioPorDia,
+        recorrido,
+      });
+    };
+
+    const diasHastaFin = Math.ceil(
+      (viaje.fechaFin - hoy) / (1000 * 60 * 60 * 24),
+    );
+
+    const puedeUsarPronostico =
+      diasHastaInicio >= 0 && diasHastaFin <= MAX_DIAS_PRONOSTICO;
+
+    if (puedeUsarPronostico) {
+      let pronostico;
+      try {
+        pronostico = await getPronostico(
+          coordenadas.latitude,
+          coordenadas.longitude,
+          fechaInicioStr,
+          fechaFinStr,
+        );
+      } catch (error) {
+        console.error(
+          "Error al pedir pronóstico a Open-Meteo:",
+          error?.response?.data || error.message,
+        );
+        return await responderConHistorico();
+      }
+
+      const dias = pronostico.time.map((fecha, i) => ({
+        fecha,
+        lluvioso: pronostico.precipitation_sum[i] >= 1,
+      }));
+      const itinerarioPorDia = armarItinerarioPorDia(dias, lugaresDestacados);
+      const lugaresOrdenados = itinerarioPorDia.flatMap((d) => d.lugares);
+
+      try {
+        const asignacion = itinerarioPorDia
+          .map((d) => `${d.fecha}: ${d.lugares.map((l) => l.nombre).join(", ") || "sin plan puntual"}`)
+          .join(" | ");
+        const prompt = `Sos un asistente de viajes. Este es el pronóstico diario para ${coordenadas.nombre} entre ${fechaInicioStr} y ${fechaFinStr} (temperaturas máx/mín en °C, precipitación en mm): ${JSON.stringify(pronostico)}. Ya se repartieron estos lugares de interés reales entre los días del viaje: ${asignacion}. Escribí una recomendación breve (máximo 4 líneas, en español) explicando por qué ese reparto tiene sentido según el clima de cada día (aire libre si está despejado, bajo techo si llueve), mencionando la temperatura o condición que lo justifica. No cambies el reparto ni inventes otros lugares.`;
         const data = await askGeminiFlash(prompt);
         recomendacion = extraerTexto(data);
       } catch (error) {
@@ -178,51 +308,24 @@ const getClimaViajeController = async (req, res) => {
         );
       }
 
-      await armarRecorrido();
+      await armarRecorrido(lugaresOrdenados);
 
       return res.status(200).json({
         tipo: "pronostico",
         destino: coordenadas.nombre,
+        destinoCoordenadas: {
+          latitude: coordenadas.latitude,
+          longitude: coordenadas.longitude,
+        },
         pronostico,
         recomendacion,
-        lugaresDestacados,
+        lugaresDestacados: lugaresOrdenados,
+        itinerarioPorDia,
         recorrido,
       });
     }
 
-    // Viaje lejano: estimación basada en el historial
-    const historico = await getHistoricoPorAnios(
-      coordenadas.latitude,
-      coordenadas.longitude,
-      fechaInicioStr,
-      fechaFinStr,
-    );
-    const resumen = resumirHistorico(historico);
-
-    try {
-      const nombresLugares = lugaresDestacados
-        .map((p) => `${p.nombre} (${p.tipo})`)
-        .join(", ");
-      const prompt = `Sos un asistente de viajes. El viaje a ${coordenadas.nombre} es dentro de ${diasHastaInicio} días, muy lejos para un pronóstico exacto. Historial de los últimos ${resumen.aniosAnalizados} años para estas fechas: máxima promedio ${resumen.temperaturaMaximaPromedio}°C, mínima promedio ${resumen.temperaturaMinimaPromedio}°C, probabilidad histórica de lluvia ${resumen.probabilidadDeLluvia}%. Estos son lugares de interés reales cerca del destino: ${nombresLugares}. Escribí una estimación breve del clima esperable (aclarando que es histórico, no exacto) y recomendá cuáles de esos lugares conviene priorizar según esa tendencia. Usá solo los lugares de la lista, no inventes otros.`;
-      const data = await askGeminiFlash(prompt);
-      recomendacion = extraerTexto(data);
-    } catch (error) {
-      console.error(
-        "Error al pedir estimación a Gemini:",
-        error?.response?.data || error.message,
-      );
-    }
-
-    await armarRecorrido();
-
-    res.status(200).json({
-      tipo: "estimacion_historica",
-      destino: coordenadas.nombre,
-      resumenHistorico: resumen,
-      recomendacion,
-      lugaresDestacados,
-      recorrido,
-    });
+    return await responderConHistorico();
   } catch (error) {
     console.error(error?.response?.data || error.message);
     res
