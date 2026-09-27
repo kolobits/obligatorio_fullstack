@@ -1,95 +1,75 @@
 const axios = require("axios");
 
 const NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search";
-const OVERPASS_ENDPOINT = "https://overpass-api.de/api/interpreter";
+const GEOAPIFY_ENDPOINT = "https://api.geoapify.com/v2/places";
 const OSRM_ENDPOINT = "https://router.project-osrm.org/route/v1/driving";
+
+const TIPOS_CIUDAD_VALIDOS = new Set(["city"]);
 
 const getCoordenadasOSM = async (lugar) => {
     const { data } = await axios.get(NOMINATIM_ENDPOINT, {
-        params: { q: lugar, format: "json", limit: 1 },
+        params: { q: lugar, format: "geocodejson", limit: 1 },
         headers: { "User-Agent": "PlanificadorViajesORT/1.0 (proyecto universitario)" }
     });
 
-    const resultado = data[0];
+    const resultado = data.features?.[0];
 
     if (!resultado) {
         return null;
     }
 
+    const tipo = resultado.properties.geocoding.type;
+
+    if (!TIPOS_CIUDAD_VALIDOS.has(tipo)) {
+        console.error(`"${lugar}" se geocodificó como "${tipo}", no como ciudad. Se rechaza.`);
+        return null;
+    }
+
+    const [longitude, latitude] = resultado.geometry.coordinates;
+
     return {
-        latitude: parseFloat(resultado.lat),
-        longitude: parseFloat(resultado.lon),
-        nombre: resultado.display_name
+        latitude,
+        longitude,
+        nombre: resultado.properties.geocoding.label
     };
 };
 
-const _distanciaKm = (lat1, lon1, lat2, lon2) => {
-    const R = 6371;
-    const x = (lon2 - lon1) * Math.PI / 180 * Math.cos((lat1 + lat2) * Math.PI / 360);
-    const y = (lat2 - lat1) * Math.PI / 180;
-    return R * Math.sqrt(x * x + y * y);
-};
-
-const TIPOS_ALOJAMIENTO = new Set([
-    "hotel", "motel", "hostel", "guest_house", "apartment", "chalet",
-    "camp_site", "caravan_site", "wilderness_hut", "alpine_hut"
-]);
-
-const TIPOS_DESTACADOS = new Set([
-    "museum", "attraction", "gallery", "artwork", "viewpoint",
-    "theme_park", "zoo", "aquarium"
-]);
-
-const _calcularImportancia = (tags) => {
-    let score = 0;
-    if (tags.wikipedia) score += 3;
-    if (tags.wikidata) score += 2;
-    if (tags.wikimedia_commons) score += 1;
-    if (tags.website || tags["contact:website"]) score += 1;
-    if (tags.image) score += 1;
-    if (TIPOS_DESTACADOS.has(tags.tourism)) score += 1;
-    return score;
-};
+// const GEOAPIFY_CATEGORIAS = "heritage,entertainment,leisure.park";
+const GEOAPIFY_CATEGORIAS = "tourism.attraction"
 
 const getPuntosDeInteres = async (latitude, longitude, radioMetros = 4000) => {
-    const query = `
-        [out:json][timeout:25];
-        node["tourism"](around:${radioMetros},${latitude},${longitude});
-        out body;
-    `;
-
     try {
-        const { data } = await axios.post(OVERPASS_ENDPOINT, query, {
-            headers: {
-                "Content-Type": "text/plain",
-                "User-Agent": "PlanificadorViajesORT/1.0 (proyecto universitario)"
+        const { data } = await axios.get(GEOAPIFY_ENDPOINT, {
+            params: {
+                categories: GEOAPIFY_CATEGORIAS,
+                filter: `circle:${longitude},${latitude},${radioMetros}`,
+                bias: `proximity:${longitude},${latitude}`,
+                limit: 20,
+                apiKey: process.env.GEOAPIFY_API_KEY
             },
             timeout: 15000
         });
 
-        if (!data || !Array.isArray(data.elements)) {
-            console.error(
-                "Respuesta inesperada de Overpass (puntos de interés):",
-                typeof data === "string" ? data.slice(0, 200) : data
-            );
+        if (!data || !Array.isArray(data.features)) {
+            console.error("Respuesta inesperada de Geoapify (puntos de interés):", data);
             return [];
         }
 
-        return data.elements
-            .filter((el) => el.tags?.name && !TIPOS_ALOJAMIENTO.has(el.tags.tourism))
-            .map((el) => ({
-                nombre: el.tags.name,
-                tipo: el.tags.tourism,
-                latitude: el.lat,
-                longitude: el.lon,
-                distanciaKm: Math.round(_distanciaKm(latitude, longitude, el.lat, el.lon) * 10) / 10,
-                importancia: _calcularImportancia(el.tags),
-                destacado: Boolean(el.tags.wikipedia || el.tags.wikidata)
+        return data.features
+            .filter((f) => f.properties?.name)
+            .map((f) => ({
+                nombre: f.properties.name,
+                tipo: f.properties.categories?.[0] || "otro",
+                latitude: f.properties.lat,
+                longitude: f.properties.lon,
+                distanciaKm: f.properties.distance != null
+                    ? Math.round(f.properties.distance / 100) / 10
+                    : null
             }))
-            .sort((a, b) => b.importancia - a.importancia || a.distanciaKm - b.distanciaKm);
+            .sort((a, b) => (a.distanciaKm ?? Infinity) - (b.distanciaKm ?? Infinity));
     } catch (error) {
         console.error(
-            "Error al consultar Overpass (puntos de interés):",
+            "Error al consultar Geoapify (puntos de interés):",
             error?.response?.data || error.message
         );
         return [];

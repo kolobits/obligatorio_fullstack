@@ -8,14 +8,20 @@ const viajeValidation = Joi.object({
     fechaFin: Joi.date().min(Joi.ref("fechaInicio")).required(),
     presupuesto: Joi.number().positive().required(),
     descripcion: Joi.string().max(200).allow(""),
-    categoria: Joi.string().max(30).allow(""),
+    categoria: Joi.string().hex().length(24).allow(null, ""),
     estado: Joi.string().valid(...ESTADOS_VIAJE),
     imagenUrl: Joi.string().uri().allow(""),
 });
 
-const viajeUpdateValidation = viajeValidation.fork(
-    ["destino", "fechaInicio", "fechaFin", "presupuesto"],
-    (schema) => schema.optional()
-);
+const viajeUpdateValidation = Joi.object({
+    destino: Joi.string().min(2).max(50),
+    fechaInicio: Joi.date(),
+    fechaFin: Joi.date().min(Joi.ref("fechaInicio")),
+    presupuesto: Joi.number().positive(),
+    descripcion: Joi.string().max(200).allow(""),
+    categoria: Joi.string().hex().length(24).allow(null, ""),
+    estado: Joi.string().valid(...ESTADOS_VIAJE),
+    imagenUrl: Joi.string().uri().allow(""),
+});
 
 module.exports = { viajeValidation, viajeUpdateValidation, ESTADOS_VIAJE };

@@ -25,7 +25,6 @@
     "mongoose": "^9.10.2",
     "morgan": "^1.12.1",
     "multer": "^2.4.0",
-    "node-mailjet": "^6.0.11",
     "xss": "^1.0.15"
   },
   "devDependencies": {

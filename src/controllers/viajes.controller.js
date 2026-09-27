@@ -19,12 +19,17 @@ const {
   getHistoricoPorAnios,
   resumirHistorico,
 } = require("../services/weather.service");
-const { askGeminiFlash, extraerTexto } = require("../services/gemini.service");
+//const { askGeminiFlash, extraerTexto } = require("../services/gemini.service");
+const { askGroq, extraerTexto } = require("../services/groq.service");
 
 const LIMITE_VIAJES_PLUS = 4;
 const MAX_DIAS_PRONOSTICO = 16;
 
-const TIPOS_INDOOR_ITINERARIO = new Set(["museum", "gallery", "aquarium"]);
+const TIPOS_INDOOR_ITINERARIO = new Set([
+  "entertainment.museum",
+  "entertainment.culture.gallery",
+  "entertainment.aquarium",
+]);
 
 const seleccionarDiversificado = (puntos, cantidad) => {
   const porTipo = new Map();
@@ -45,7 +50,7 @@ const seleccionarDiversificado = (puntos, cantidad) => {
   }
 
   return seleccion
-    .sort((a, b) => b.importancia - a.importancia || a.distanciaKm - b.distanciaKm)
+    .sort((a, b) => a.distanciaKm - b.distanciaKm)
     .slice(0, cantidad);
 };
 
@@ -200,11 +205,20 @@ const getClimaViajeController = async (req, res) => {
     const fechaInicioStr = viaje.fechaInicio.toISOString().split("T")[0];
     const fechaFinStr = viaje.fechaFin.toISOString().split("T")[0];
 
+    const diasDelViaje = _diasDelViaje(viaje.fechaInicio, viaje.fechaFin);
+    const LUGARES_POR_DIA = 2;
+
     const puntos = await getPuntosDeInteres(
       coordenadas.latitude,
       coordenadas.longitude,
     );
-    const lugaresDestacados = seleccionarDiversificado(puntos, 5);
+    const soloAtracciones = puntos.filter(
+      (p) => !p.tipo?.startsWith("catering."),
+    );
+    const lugaresDestacados = seleccionarDiversificado(
+      soloAtracciones,
+      diasDelViaje.length * LUGARES_POR_DIA,
+    );
 
     let recomendacion = null;
     let recorrido = null;
@@ -228,16 +242,21 @@ const getClimaViajeController = async (req, res) => {
       );
       const resumen = resumirHistorico(historico);
 
-      const dias = _diasDelViaje(viaje.fechaInicio, viaje.fechaFin);
-      const itinerarioPorDia = armarItinerarioPorDia(dias, lugaresDestacados);
+      const itinerarioPorDia = armarItinerarioPorDia(
+        diasDelViaje,
+        lugaresDestacados,
+      );
       const lugaresOrdenados = itinerarioPorDia.flatMap((d) => d.lugares);
 
       try {
         const asignacion = itinerarioPorDia
-          .map((d) => `${d.fecha}: ${d.lugares.map((l) => l.nombre).join(", ") || "sin plan puntual"}`)
+          .map(
+            (d) =>
+              `${d.fecha}: ${d.lugares.map((l) => l.nombre).join(", ") || "sin plan puntual"}`,
+          )
           .join(" | ");
         const prompt = `Sos un asistente de viajes. El viaje a ${coordenadas.nombre} es dentro de ${diasHastaInicio} días, muy lejos para un pronóstico exacto. Historial de los últimos ${resumen.aniosAnalizados} años para estas fechas: máxima promedio ${resumen.temperaturaMaximaPromedio}°C, mínima promedio ${resumen.temperaturaMinimaPromedio}°C, probabilidad histórica de lluvia ${resumen.probabilidadDeLluvia}%. Ya se repartieron estos lugares de interés reales entre los días del viaje: ${asignacion}. Escribí una estimación breve del clima esperable (aclarando que es histórico, no exacto) y comentá brevemente por qué conviene ese reparto. No cambies el reparto ni inventes otros lugares.`;
-        const data = await askGeminiFlash(prompt);
+        const data = await askGroq(prompt);
         recomendacion = extraerTexto(data);
       } catch (error) {
         console.error(
@@ -287,19 +306,29 @@ const getClimaViajeController = async (req, res) => {
         return await responderConHistorico();
       }
 
-      const dias = pronostico.time.map((fecha, i) => ({
-        fecha,
-        lluvioso: pronostico.precipitation_sum[i] >= 1,
-      }));
+      const indicePorFecha = new Map(
+        pronostico.time.map((fecha, i) => [fecha, i]),
+      );
+      const dias = diasDelViaje.map((dia) => {
+        const i = indicePorFecha.get(dia.fecha);
+        return {
+          ...dia,
+          lluvioso:
+            i !== undefined ? pronostico.precipitation_sum[i] >= 1 : null,
+        };
+      });
       const itinerarioPorDia = armarItinerarioPorDia(dias, lugaresDestacados);
       const lugaresOrdenados = itinerarioPorDia.flatMap((d) => d.lugares);
 
       try {
         const asignacion = itinerarioPorDia
-          .map((d) => `${d.fecha}: ${d.lugares.map((l) => l.nombre).join(", ") || "sin plan puntual"}`)
+          .map(
+            (d) =>
+              `${d.fecha}: ${d.lugares.map((l) => l.nombre).join(", ") || "sin plan puntual"}`,
+          )
           .join(" | ");
         const prompt = `Sos un asistente de viajes. Este es el pronóstico diario para ${coordenadas.nombre} entre ${fechaInicioStr} y ${fechaFinStr} (temperaturas máx/mín en °C, precipitación en mm): ${JSON.stringify(pronostico)}. Ya se repartieron estos lugares de interés reales entre los días del viaje: ${asignacion}. Escribí una recomendación breve (máximo 4 líneas, en español) explicando por qué ese reparto tiene sentido según el clima de cada día (aire libre si está despejado, bajo techo si llueve), mencionando la temperatura o condición que lo justifica. No cambies el reparto ni inventes otros lugares.`;
-        const data = await askGeminiFlash(prompt);
+        const data = await askGroq(prompt);
         recomendacion = extraerTexto(data);
       } catch (error) {
         console.error(
@@ -335,38 +364,53 @@ const getClimaViajeController = async (req, res) => {
 };
 
 const getDistanciaViajeController = async (req, res) => {
-    const viajeId = req.params.id;
-    const { id } = req.user;
-    const { origen } = req.query;
+  const viajeId = req.params.id;
+  const { id } = req.user;
+  const { origen } = req.query;
 
-    if (!origen) {
-        return res.status(400).json({ message: "Falta el parámetro 'origen' (ciudad desde donde salís)" });
-    }
+  if (!origen) {
+    return res
+      .status(400)
+      .json({
+        message: "Falta el parámetro 'origen' (ciudad desde donde salís)",
+      });
+  }
 
-    try {
-        const viaje = await findViaje(viajeId, id);
-        if (!viaje) return res.status(404).json({ message: "Viaje no encontrado" });
+  try {
+    const viaje = await findViaje(viajeId, id);
+    if (!viaje) return res.status(404).json({ message: "Viaje no encontrado" });
 
-        const [coordenadasOrigen, coordenadasDestino] = await Promise.all([
-            getCoordenadasOSM(origen),
-            getCoordenadasOSM(viaje.destino)
-        ]);
+    const [coordenadasOrigen, coordenadasDestino] = await Promise.all([
+      getCoordenadasOSM(origen),
+      getCoordenadasOSM(viaje.destino),
+    ]);
 
-        if (!coordenadasOrigen) return res.status(404).json({ message: `No se encontró la ubicación de origen "${origen}"` });
-        if (!coordenadasDestino) return res.status(404).json({ message: `No se encontró el destino "${viaje.destino}"` });
+    if (!coordenadasOrigen)
+      return res
+        .status(404)
+        .json({ message: `No se encontró la ubicación de origen "${origen}"` });
+    if (!coordenadasDestino)
+      return res
+        .status(404)
+        .json({ message: `No se encontró el destino "${viaje.destino}"` });
 
-        const resultado = await getRuta(coordenadasOrigen, coordenadasDestino);
-        if (!resultado) return res.status(404).json({ message: "No se pudo calcular una ruta entre esos puntos" });
+    const resultado = await getRuta(coordenadasOrigen, coordenadasDestino);
+    if (!resultado)
+      return res
+        .status(404)
+        .json({ message: "No se pudo calcular una ruta entre esos puntos" });
 
-        res.status(200).json({
-            origen: coordenadasOrigen.nombre,
-            destino: coordenadasDestino.nombre,
-            ...resultado
-        });
-    } catch (error) {
-        console.error(error?.response?.data || error.message);
-        res.status(500).json({ message: "Ha ocurrido un error al calcular la distancia" });
-    }
+    res.status(200).json({
+      origen: coordenadasOrigen.nombre,
+      destino: coordenadasDestino.nombre,
+      ...resultado,
+    });
+  } catch (error) {
+    console.error(error?.response?.data || error.message);
+    res
+      .status(500)
+      .json({ message: "Ha ocurrido un error al calcular la distancia" });
+  }
 };
 
 const getPuntosInteresViajeController = async (req, res) => {
