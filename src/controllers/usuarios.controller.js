@@ -33,4 +33,24 @@ const putPlanController = async (req, res) => {
   }
 };
 
-module.exports = { putPlanController };
+const getPerfilController = async (req, res) => {
+  const { id } = req.user;
+
+  try {
+    const usuario = await findUserById(id);
+
+    if (!usuario) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    res.status(200).json({
+      id: usuario._id,
+      username: usuario.username,
+      perfil: usuario.perfil,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Ha ocurrido un error", error });
+  }
+};
+
+module.exports = { putPlanController, getPerfilController };
