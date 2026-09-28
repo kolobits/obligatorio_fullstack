@@ -4,14 +4,13 @@ const connectToRedis = require("../services/redis.service");
 const _getViajesRedisKey = (userId) => `userId:${userId}-viajes`;
 const _getClimaRedisKey = (viajeId) => `viajeId:${viajeId}-clima`;
 
-// Ej: "userId:123-viajes:page=1&limit=5&estado=planificado&categoria="
 const _getViajesListaRedisKey = (userId, filtros, page, limit) => {
   const estado = filtros.estado || "";
   const categoria = filtros.categoria || "";
   return `${_getViajesRedisKey(userId)}:page=${page}&limit=${limit}&estado=${estado}&categoria=${categoria}`;
 };
 
-// Borra todas las listas guardadas del usuario (todas las páginas y filtros)
+
 const _invalidarCacheViajes = async (userId) => {
   const redisClient = connectToRedis();
   const claves = await redisClient.keys(`${_getViajesRedisKey(userId)}*`);
@@ -65,8 +64,7 @@ const deleteViaje = async (viajeId, userId) => {
   return resultado;
 };
 
-// Lista paginada con filtros. Cada combinación de página y filtros
-// se guarda en Redis con su propia clave.
+
 const getViajesPaginated = async (userId, filtros, page, limit) => {
   const redisClient = connectToRedis();
   const redisKey = _getViajesListaRedisKey(userId, filtros, page, limit);

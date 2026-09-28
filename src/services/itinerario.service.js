@@ -51,8 +51,8 @@ const _prioridad = (lugar) => {
 
 const _seleccionarLugares = (puntos, cantidadDias) => {
     const cantidad = cantidadDias * LUGARES_POR_DIA;
+    const maxPorTipo = Math.ceil(cantidadDias / 2);
 
-    // 1. Ordenamos por importancia y, entre iguales, por cercanía
     const ordenados = [...puntos].sort((a, b) => {
         if (_prioridad(a) !== _prioridad(b)) {
             return _prioridad(a) - _prioridad(b);
@@ -60,36 +60,15 @@ const _seleccionarLugares = (puntos, cantidadDias) => {
         return a.distanciaKm - b.distanciaKm;
     });
 
-
-    const grupos = {};
-    ordenados.forEach((lugar) => {
-        if (!grupos[lugar.tipo]) {
-            grupos[lugar.tipo] = [];
-        }
-        grupos[lugar.tipo].push(lugar);
-    });
-    const listas = Object.values(grupos);
-
-
-    const maxParques = Math.ceil(cantidadDias / 2);
-    let parques = 0;
     const seleccion = [];
-    const rondas = Math.max(0, ...listas.map((lista) => lista.length));
-    for (let ronda = 0; ronda < rondas; ronda++) {
-        listas.forEach((lista) => {
-            const lugar = lista[ronda];
-            if (!lugar || seleccion.length >= cantidad) {
-                return;
-            }
-            if (lugar.tipo === "leisure.park") {
-                if (parques >= maxParques) {
-                    return;
-                }
-                parques++;
-            }
+    const usadosPorTipo = {};
+    ordenados.forEach((lugar) => {
+        const usados = usadosPorTipo[lugar.tipo] || 0;
+        if (seleccion.length < cantidad && usados < maxPorTipo) {
             seleccion.push(lugar);
-        });
-    }
+            usadosPorTipo[lugar.tipo] = usados + 1;
+        }
+    });
 
     return seleccion;
 };

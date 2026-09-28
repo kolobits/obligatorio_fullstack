@@ -34,8 +34,7 @@ const getCoordenadasOSM = async (lugar) => {
     };
 };
 
-// Categorías que le pedimos a Geoapify, de la más importante a la menos importante
-// (ver https://apidocs.geoapify.com/docs/places/)
+
 const CATEGORIAS_TURISTICAS = [
     "entertainment.museum",
     "entertainment.culture",
@@ -45,18 +44,14 @@ const CATEGORIAS_TURISTICAS = [
     "leisure.park",
 ];
 
-// Cada lugar trae todas sus categorías (ej: ["entertainment", "entertainment.museum"]).
-// Nos quedamos con la primera de nuestra lista que tenga.
 const _categoriaPrincipal = (categorias = []) => {
     const principal = CATEGORIAS_TURISTICAS.find((categoria) => categorias.includes(categoria));
     return principal || categorias[0] || "otro";
 };
 
-// OpenStreetMap a veces tiene el mismo lugar cargado dos veces con el mismo nombre
 const _sinRepetidos = (features) => {
     const nombres = [];
     return features.filter((f) => {
-        // En minúscula y sin tildes: "Simón Bolívar" y "Simon Bolivar" son el mismo
         const nombre = f.properties.name
             .trim()
             .toLowerCase()

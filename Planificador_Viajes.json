@@ -1,0 +1,792 @@
+{
+  "info": {
+    "_postman_id": "8487e18f-c89a-4a16-91b0-8b56e630a4fc",
+    "name": "Planificador de Viajes Inteligente",
+    "description": "Colección del Obligatorio 1 - Desarrollo Full Stack integrado con IA. Flujo de casos de éxito: registro -> login -> perfil -> categorías -> CRUD de viajes, clima/itinerario con IA, distancia, cambio de plan y puntos de interés (premium). Correr en orden con el Collection Runner.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Public",
+      "item": [
+        {
+          "name": "Health check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Responde OK\", function () {",
+                  "    pm.expect(pm.response.text()).to.eql(\"OK\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{prod_base_url}}/health",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Ping",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Responde pong\", function () {",
+                  "    pm.expect(pm.response.text()).to.eql(\"pong\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{prod_base_url}}/ping",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "ping"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Signup - registro exitoso",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"Devuelve id, username y perfil plus\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.expect(jsonData).to.have.property('username');",
+                  "    pm.expect(jsonData.perfil).to.eql('plus');",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('test_username', jsonData.username);",
+                  "pm.collectionVariables.set('test_password', 'Abcd1234');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/auth/signup",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Usuario Prueba\",\n  \"username\": \"test_{{$timestamp}}\",\n  \"email\": \"test_{{$timestamp}}@mail.com\",\n  \"password\": \"Abcd1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login - credenciales correctas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Devuelve un token\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('token');",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('token', jsonData.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/auth/login",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{test_username}}\",\n  \"password\": \"{{test_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Usuarios",
+      "item": [
+        {
+          "name": "Obtener perfil",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Devuelve el usuario logueado en plan plus\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.username).to.eql(pm.collectionVariables.get('test_username'));",
+                  "    pm.expect(jsonData.perfil).to.eql('plus');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/usuarios/perfil",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "usuarios",
+                "perfil"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Categorias",
+      "item": [
+        {
+          "name": "Listar categorías",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Devuelve un array\", function () {",
+                  "    pm.expect(pm.response.json()).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/categorias",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "categorias"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Viajes",
+      "item": [
+        {
+          "name": "Crear viaje - datos válidos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"Devuelve el viaje creado con _id\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('_id');",
+                  "    pm.expect(jsonData.destino).to.eql('Bariloche');",
+                  "    pm.expect(jsonData.estado).to.eql('planificado');",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('viaje_id', jsonData._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/viajes",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "viajes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destino\": \"Bariloche\",\n  \"fechaInicio\": \"2026-12-10\",\n  \"fechaFin\": \"2026-12-17\",\n  \"presupuesto\": 800,\n  \"descripcion\": \"Vacaciones de verano\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Listar viajes (paginado)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Respuesta paginada con el viaje creado\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('data');",
+                  "    pm.expect(jsonData).to.have.property('total');",
+                  "    pm.expect(jsonData.page).to.eql(1);",
+                  "    pm.expect(jsonData.limit).to.eql(5);",
+                  "    var ids = jsonData.data.map(function (v) { return v._id; });",
+                  "    pm.expect(ids).to.include(pm.collectionVariables.get('viaje_id'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/viajes?page=1&limit=5",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "viajes"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener viaje por id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Devuelve el viaje pedido\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData._id).to.eql(pm.collectionVariables.get('viaje_id'));",
+                  "    pm.expect(jsonData.destino).to.eql('Bariloche');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/viajes/{{viaje_id}}",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "viajes",
+                "{{viaje_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener clima e itinerario del viaje",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Devuelve clima e itinerario por día\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.tipo).to.be.oneOf(['pronostico', 'estimacion_historica']);",
+                  "    pm.expect(jsonData).to.have.property('destino');",
+                  "    pm.expect(jsonData.itinerarioPorDia).to.be.an('array');",
+                  "});",
+                  "pm.test(\"Tiene recomendación de IA\", function () {",
+                  "    pm.expect(pm.response.json().recomendacion).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/viajes/{{viaje_id}}/clima",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "viajes",
+                "{{viaje_id}}",
+                "clima"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener distancia desde origen",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Devuelve origen y destino\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('origen');",
+                  "    pm.expect(jsonData).to.have.property('destino');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/viajes/{{viaje_id}}/distancia?origen=Montevideo",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "viajes",
+                "{{viaje_id}}",
+                "distancia"
+              ],
+              "query": [
+                {
+                  "key": "origen",
+                  "value": "Montevideo"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cambiar plan a premium",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"El perfil pasa a premium\", function () {",
+                  "    pm.expect(pm.response.json().perfil).to.eql('premium');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/usuarios/plan",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "usuarios",
+                "plan"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener puntos de interés (premium)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Devuelve lista de puntos de interés\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('destino');",
+                  "    pm.expect(jsonData.puntosDeInteres).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/viajes/{{viaje_id}}/puntos-interes",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "viajes",
+                "{{viaje_id}}",
+                "puntos-interes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar viaje",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"El presupuesto y el estado se actualizaron\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.presupuesto).to.eql(1200);",
+                  "    pm.expect(jsonData.estado).to.eql('en_curso');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/viajes/{{viaje_id}}",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "viajes",
+                "{{viaje_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"presupuesto\": 1200,\n  \"estado\": \"en_curso\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Listar viajes filtrando por estado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Solo devuelve viajes en curso e incluye el editado\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    jsonData.data.forEach(function (v) { pm.expect(v.estado).to.eql(\"en_curso\"); });",
+                  "    var ids = jsonData.data.map(function (v) { return v._id; });",
+                  "    pm.expect(ids).to.include(pm.collectionVariables.get('viaje_id'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/viajes?estado=en_curso&page=1&limit=5",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "viajes"
+              ],
+              "query": [
+                {
+                  "key": "estado",
+                  "value": "en_curso"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar viaje",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{prod_base_url}}/v1/viajes/{{viaje_id}}",
+              "host": [
+                "{{prod_base_url}}"
+              ],
+              "path": [
+                "v1",
+                "viajes",
+                "{{viaje_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "prod_base_url",
+      "value": ""
+    },
+    {
+      "key": "test_username",
+      "value": ""
+    },
+    {
+      "key": "test_password",
+      "value": ""
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "viaje_id",
+      "value": ""
+    }
+  ]
+}

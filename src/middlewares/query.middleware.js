@@ -1,4 +1,4 @@
-// Igual que payloadMiddleware, pero valida los query params (?page=1&estado=...)
+
 const queryMiddleware = (schema) => {
   return (req, res, next) => {
     const { error } = schema.validate(req.query);

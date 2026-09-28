@@ -4,7 +4,6 @@ const { uploadBufferToCloudinary } = require("../utils/cloudinary.util");
 
 const subirImagen = async (req, res) => {
     try {
-        //req.file
         if(!req.file){
             return res.status(400).json({error: "No se subió ninguna imagen (solo se aceptan archivos de imagen)"});
         }
