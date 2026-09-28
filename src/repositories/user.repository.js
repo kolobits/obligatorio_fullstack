@@ -5,6 +5,10 @@ const findUserByUsername = async (username) => {
   return await User.findOne({ username: username });
 };
 
+const findUserByEmail = async (email) => {
+  return await User.findOne({ email: email });
+};
+
 const findUserById = async (userId) => {
   return await User.findById(userId);
 };
@@ -26,12 +30,13 @@ const updatePerfil = async (userId, perfil) => {
   return await User.findByIdAndUpdate(
     userId,
     { perfil: perfil },
-    { new: true },
+    { returnDocument: "after" },
   );
 };
 
 module.exports = {
   findUserByUsername,
+  findUserByEmail,
   findUserById,
   saveUser,
   updatePerfil,

@@ -34,17 +34,50 @@ const getCoordenadasOSM = async (lugar) => {
     };
 };
 
-// const GEOAPIFY_CATEGORIAS = "heritage,entertainment,leisure.park";
-const GEOAPIFY_CATEGORIAS = "tourism.attraction"
+// Categorías que le pedimos a Geoapify, de la más importante a la menos importante
+// (ver https://apidocs.geoapify.com/docs/places/)
+const CATEGORIAS_TURISTICAS = [
+    "entertainment.museum",
+    "entertainment.culture",
+    "heritage",
+    "tourism.sights",
+    "tourism.attraction",
+    "leisure.park",
+];
+
+// Cada lugar trae todas sus categorías (ej: ["entertainment", "entertainment.museum"]).
+// Nos quedamos con la primera de nuestra lista que tenga.
+const _categoriaPrincipal = (categorias = []) => {
+    const principal = CATEGORIAS_TURISTICAS.find((categoria) => categorias.includes(categoria));
+    return principal || categorias[0] || "otro";
+};
+
+// OpenStreetMap a veces tiene el mismo lugar cargado dos veces con el mismo nombre
+const _sinRepetidos = (features) => {
+    const nombres = [];
+    return features.filter((f) => {
+        // En minúscula y sin tildes: "Simón Bolívar" y "Simon Bolivar" son el mismo
+        const nombre = f.properties.name
+            .trim()
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "");
+        if (nombres.includes(nombre)) {
+            return false;
+        }
+        nombres.push(nombre);
+        return true;
+    });
+};
 
 const getPuntosDeInteres = async (latitude, longitude, radioMetros = 4000) => {
     try {
         const { data } = await axios.get(GEOAPIFY_ENDPOINT, {
             params: {
-                categories: GEOAPIFY_CATEGORIAS,
+                categories: CATEGORIAS_TURISTICAS.join(","),
                 filter: `circle:${longitude},${latitude},${radioMetros}`,
                 bias: `proximity:${longitude},${latitude}`,
-                limit: 20,
+                limit: 40,
                 apiKey: process.env.GEOAPIFY_API_KEY
             },
             timeout: 15000
@@ -55,11 +88,12 @@ const getPuntosDeInteres = async (latitude, longitude, radioMetros = 4000) => {
             return [];
         }
 
-        return data.features
-            .filter((f) => f.properties?.name)
+        const conNombre = data.features.filter((f) => f.properties?.name);
+
+        return _sinRepetidos(conNombre)
             .map((f) => ({
                 nombre: f.properties.name,
-                tipo: f.properties.categories?.[0] || "otro",
+                tipo: _categoriaPrincipal(f.properties.categories),
                 latitude: f.properties.lat,
                 longitude: f.properties.lon,
                 distanciaKm: f.properties.distance != null
@@ -133,4 +167,10 @@ const getRutaConParadas = async (puntos) => {
     }
 };
 
-module.exports = { getCoordenadasOSM, getPuntosDeInteres, getRuta, getRutaConParadas };
+module.exports = {
+    CATEGORIAS_TURISTICAS,
+    getCoordenadasOSM,
+    getPuntosDeInteres,
+    getRuta,
+    getRutaConParadas,
+};

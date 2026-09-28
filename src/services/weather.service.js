@@ -17,9 +17,6 @@ const getPronostico = async (latitude, longitude, fechaInicio, fechaFin) => {
     return data.daily;
 };
 
-module.exports = { getPronostico };
-
-
 const ARCHIVE_ENDPOINT = "https://archive-api.open-meteo.com/v1/archive";
 
 const getHistoricoPorAnios = async (latitude, longitude, fechaInicio, fechaFin, aniosAtras = 5) => {

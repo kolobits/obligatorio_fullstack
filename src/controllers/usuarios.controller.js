@@ -29,7 +29,8 @@ const putPlanController = async (req, res) => {
       perfil: actualizado.perfil,
     });
   } catch (error) {
-    res.status(500).json({ message: "Ha ocurrido un error", error });
+    console.error(error);
+    res.status(500).json({ message: "Ha ocurrido un error" });
   }
 };
 
@@ -49,7 +50,8 @@ const getPerfilController = async (req, res) => {
       perfil: usuario.perfil,
     });
   } catch (error) {
-    res.status(500).json({ message: "Ha ocurrido un error", error });
+    console.error(error);
+    res.status(500).json({ message: "Ha ocurrido un error" });
   }
 };
 

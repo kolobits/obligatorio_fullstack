@@ -8,7 +8,8 @@ const adminMiddleware = async (req, res, next) => {
         }
         next();
     } catch (error) {
-        res.status(500).json({ message: "Ha ocurrido un error", error });
+        console.error(error);
+        res.status(500).json({ message: "Ha ocurrido un error" });
     }
 };
 
