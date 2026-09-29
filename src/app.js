@@ -14,8 +14,6 @@ const dbMiddleware = require("./middlewares/db.middleware");
 const xssMiddleware = require("./middlewares/xss.middleware");
 const { generalLimiter } = require("./middlewares/rateLimit.middleware");
 
-app.set("trust proxy", 1);
-
 app.use(express.json());
 app.use(xssMiddleware);
 app.use(loggerMiddleware);

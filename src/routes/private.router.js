@@ -29,7 +29,6 @@ const adminMiddleware = require("../middlewares/admin.middleware");
 const { iaLimiter } = require("../middlewares/rateLimit.middleware");
 const {
   viajeValidation,
-  viajeUpdateValidation,
   viajeQueryValidation,
 } = require("./validations/viaje.validation");
 const {
@@ -44,7 +43,7 @@ router.post("/viajes", payloadMiddleware(viajeValidation), postViajeController);
 router.put(
   "/viajes/:id",
   idMiddleware,
-  payloadMiddleware(viajeUpdateValidation),
+  payloadMiddleware(viajeValidation),
   putViajeController,
 );
 router.delete("/viajes/:id", idMiddleware, deleteViajeController);
