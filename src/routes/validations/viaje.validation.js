@@ -1,17 +1,27 @@
 const Joi = require("joi");
 
+const ESTADOS_VIAJE = ["planificado", "en_curso", "finalizado", "cancelado"];
+
 const viajeValidation = Joi.object({
     destino: Joi.string().min(2).max(50).required(),
     fechaInicio: Joi.date().required(),
-    fechaFin: Joi.date().required(),
+    fechaFin: Joi.date().min(Joi.ref("fechaInicio")).required(),
     presupuesto: Joi.number().positive().required(),
-    descripcion: Joi.string().max(200),
-    categoria: Joi.string().max(30),
+    descripcion: Joi.string().max(200).allow(""),
+    categoria: Joi.string().hex().length(24).allow(null),
+    estado: Joi.string().valid(...ESTADOS_VIAJE),
+    imagenUrl: Joi.string().uri().allow(""),
 });
 
-const viajeUpdateValidation = viajeValidation.fork(
-    ["destino", "fechaInicio", "fechaFin", "presupuesto"],
-    (schema) => schema.optional()
-);
+const viajeQueryValidation = Joi.object({
+    page: Joi.number().integer().min(1),
+    limit: Joi.number().integer().min(1).max(50),
+    estado: Joi.string().valid(...ESTADOS_VIAJE),
+    categoria: Joi.string().hex().length(24),
+});
 
-module.exports = { viajeValidation, viajeUpdateValidation };
+module.exports = {
+    viajeValidation,
+    viajeQueryValidation,
+    ESTADOS_VIAJE,
+};

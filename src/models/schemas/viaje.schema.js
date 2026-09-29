@@ -7,8 +7,13 @@ const viajeSchema = new mongoose.Schema({
     fechaFin: { type: Date, required: true },
     presupuesto: { type: Number, required: true },
     descripcion: { type: String },
-    categoria: { type: String },
-    estado: { type: String, default: "planificado" },
+    categoria: { type: mongoose.Schema.Types.ObjectId, ref: "Categoria" },
+    estado: {
+        type: String,
+        enum: ["planificado", "en_curso", "finalizado", "cancelado"],
+        default: "planificado",
+    },
+    imagenUrl: { type: String },
 },
 {
     timestamps: true
