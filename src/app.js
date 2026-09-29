@@ -8,12 +8,11 @@ const privateRouter = require('./routes/private.router');
 const publicRouter = require('./routes/public.router');
 const authRouter = require('./routes/auth.router');
 const uploadsRouter = require("./routes/uploads.router");
-const iaRouter = require("./routes/ia.router");
-const loggerMiddleware = require('./middlewares/loggerMiddleware');
-const authMiddleware = require('./middlewares/authMiddleware');
+const loggerMiddleware = require('./middlewares/logger.middleware');
+const authMiddleware = require('./middlewares/auth.middleware');
 const dbMiddleware = require("./middlewares/db.middleware");
 const xssMiddleware = require("./middlewares/xss.middleware");
-const { generalLimiter, iaLimiter } = require("./middlewares/rateLimit.middleware");
+const { generalLimiter } = require("./middlewares/rateLimit.middleware");
 
 app.set("trust proxy", 1);
 
@@ -22,10 +21,12 @@ app.use(xssMiddleware);
 app.use(loggerMiddleware);
 app.use(morgan('dev'));
 app.use(cors());
+
 app.use(generalLimiter);
 
-app.use(dbMiddleware);
 app.use('/', publicRouter);
+
+app.use(dbMiddleware);
 
 app.use('/v1/auth', authRouter);
 
@@ -35,9 +36,6 @@ app.use(authMiddleware);
 app.use('/v1', privateRouter);
 
 app.use("/v1/uploads", uploadsRouter);
-
-app.use("/v1/ai", iaLimiter, iaRouter);
-
 
 app.use((err, req, res, next) => {
   console.error("Error no controlado:", err);

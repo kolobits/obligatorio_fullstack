@@ -25,7 +25,7 @@ const {
 const payloadMiddleware = require("../middlewares/payload.middleware");
 const queryMiddleware = require("../middlewares/query.middleware");
 const idMiddleware = require("../middlewares/id.middleware");
-const adminMiddleware = require("../middlewares/adminMiddleware");
+const adminMiddleware = require("../middlewares/admin.middleware");
 const { iaLimiter } = require("../middlewares/rateLimit.middleware");
 const {
   viajeValidation,

@@ -24,7 +24,6 @@ const viajeUpdateValidation = Joi.object({
     imagenUrl: Joi.string().uri().allow(""),
 });
 
-// Query params de GET /viajes: paginación y filtros
 const viajeQueryValidation = Joi.object({
     page: Joi.number().integer().min(1),
     limit: Joi.number().integer().min(1).max(50),

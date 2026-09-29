@@ -105,7 +105,6 @@ const countViajesByUser = async (userId) => {
   return await Viaje.countDocuments({ userId: userId });
 };
 
-// La caché del clima es una optimización: si Redis falla, seguimos sin caché
 const getClimaCache = async (viajeId) => {
   try {
     const redisClient = connectToRedis();
