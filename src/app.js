@@ -49,6 +49,6 @@ module.exports = app;
 if(require.main === module) {
   const PORT = process.env.PORT;
   app.listen(PORT, () => {
-    console.log(`Listen & serve PORT: ${PORT}`);
+    console.log(`Listen & serve on Vercel: https://obligatorio1-fullstack.vercel.app`);
   });
 }
