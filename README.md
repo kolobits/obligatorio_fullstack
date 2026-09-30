@@ -357,5 +357,5 @@ Las variables de entorno se configuran en **Settings → Environment Variables**
 | Camilo Pardo | 200710 |
 | Rodrigo Gomez | 306926 |
 
-Universidad ORT Uruguay — Facultad de Ingeniería
+Universidad ORT Uruguay — Facultad de Ingeniería -
 Desarrollo Full Stack integrado con IA, 2026
