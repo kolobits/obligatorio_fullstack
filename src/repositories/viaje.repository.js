@@ -1,27 +1,15 @@
 const Viaje = require("../models/viaje.model");
 const connectToRedis = require("../services/redis.service");
 
-const _getViajesRedisKey = (userId) => `userId:${userId}-viajes`;
 const _getClimaRedisKey = (viajeId) => `viajeId:${viajeId}-clima`;
 
-const _getViajesListaRedisKey = (userId, filtros, page, limit) => {
-  const estado = filtros.estado || "";
-  const categoria = filtros.categoria || "";
-  return `${_getViajesRedisKey(userId)}:page=${page}&limit=${limit}&estado=${estado}&categoria=${categoria}`;
-};
-
-
-const _invalidarCacheViajes = async (userId) => {
-  const redisClient = connectToRedis();
-  const claves = await redisClient.keys(`${_getViajesRedisKey(userId)}*`);
-  if (claves.length > 0) {
-    await redisClient.del(...claves);
-  }
-};
-
 const _invalidarCacheClima = async (viajeId) => {
-  const redisClient = connectToRedis();
-  await redisClient.del(_getClimaRedisKey(viajeId));
+  try {
+    const redisClient = connectToRedis();
+    await redisClient.del(_getClimaRedisKey(viajeId));
+  } catch (error) {
+    console.error("Error al invalidar el clima en Redis:", error.message);
+  }
 };
 
 const findViaje = async (viajeId, userId) => {
@@ -30,11 +18,7 @@ const findViaje = async (viajeId, userId) => {
 
 const createViaje = async (data, userId) => {
   const nuevoViaje = new Viaje({ ...data, userId: userId });
-  const viajeGuardado = await nuevoViaje.save();
-
-  await _invalidarCacheViajes(userId);
-
-  return viajeGuardado;
+  return await nuevoViaje.save();
 };
 
 const updateViaje = async (viajeId, userId, payload) => {
@@ -46,7 +30,6 @@ const updateViaje = async (viajeId, userId, payload) => {
     });
     await viaje.save();
 
-    await _invalidarCacheViajes(userId);
     await _invalidarCacheClima(viajeId);
   }
 
@@ -57,24 +40,15 @@ const deleteViaje = async (viajeId, userId) => {
   const resultado = await Viaje.deleteOne({ _id: viajeId, userId: userId });
 
   if (resultado.deletedCount > 0) {
-    await _invalidarCacheViajes(userId);
     await _invalidarCacheClima(viajeId);
   }
 
   return resultado;
 };
 
-
 const getViajesPaginated = async (userId, filtros, page, limit) => {
-  const redisClient = connectToRedis();
-  const redisKey = _getViajesListaRedisKey(userId, filtros, page, limit);
-
-  const guardado = await redisClient.get(redisKey);
-  if (guardado) {
-    return guardado;
-  }
-
   const query = { userId: userId };
+
   if (filtros.estado) {
     query.estado = filtros.estado;
   }
@@ -83,22 +57,19 @@ const getViajesPaginated = async (userId, filtros, page, limit) => {
   }
 
   const skip = (page - 1) * limit;
-  const viajes = await Viaje.find(query)
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit);
-  const total = await Viaje.countDocuments(query);
 
-  const resultado = {
+  const [viajes, total] = await Promise.all([
+    Viaje.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+    Viaje.countDocuments(query),
+  ]);
+
+  return {
     data: viajes,
     page,
     limit,
     total,
     totalPages: Math.ceil(total / limit),
   };
-
-  await redisClient.set(redisKey, resultado, { ex: 3600 });
-  return resultado;
 };
 
 const countViajesByUser = async (userId) => {
