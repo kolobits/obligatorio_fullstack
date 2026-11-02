@@ -4,7 +4,7 @@ const NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search";
 const GEOAPIFY_ENDPOINT = "https://api.geoapify.com/v2/places";
 const OSRM_ENDPOINT = "https://router.project-osrm.org/route/v1/driving";
 
-const TIPOS_CIUDAD_VALIDOS = new Set(["city"]);
+const TIPOS_CIUDAD_VALIDOS = new Set(["city", "town", "village", "district", "county", "state"]);
 
 const getCoordenadasOSM = async (lugar) => {
     const { data } = await axios.get(NOMINATIM_ENDPOINT, {
