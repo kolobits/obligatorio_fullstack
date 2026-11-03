@@ -98,8 +98,8 @@ const armarPlanDeViaje = async (viaje, diasHastaInicio) => {
     const fechaFin = formatearFecha(viaje.fechaFin);
     const dias = obtenerDiasDelViaje(viaje.fechaInicio, viaje.fechaFin);
 
+    
     const puntos = await getPuntosDeInteres(coordenadas.latitude, coordenadas.longitude);
-    const lugares = puntos.slice(0, dias.length * LUGARES_POR_DIA);
 
     let pronostico = null;
     let resumenHistorico = null;
@@ -137,7 +137,7 @@ const armarPlanDeViaje = async (viaje, diasHastaInicio) => {
         resumenHistorico = resumirHistorico(historico);
     }
 
-    const itinerario = armarItinerario(dias, lugares);
+    const itinerario = armarItinerario(dias, puntos);
 
     let lugaresOrdenados = [];
     itinerario.forEach((dia) => {
