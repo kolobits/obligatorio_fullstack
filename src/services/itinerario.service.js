@@ -72,7 +72,7 @@ const armarItinerario = (dias, lugares) => {
     return dias;
 };
 
-
+// Código de Open-Meteo -> texto que la IA entiende sin inventar
 const describirClima = (codigo) => {
     if (codigo === 0) return "despejado";
     if (codigo <= 3) return "parcialmente nublado";
@@ -83,6 +83,8 @@ const describirClima = (codigo) => {
     return "con tormenta";
 };
 
+// Arma el plan en texto, un renglón por día:
+// "Día 1 (miércoles): despejado, máxima 27° y mínima 22°. Lugares: Cristo Redentor (al aire libre), ..."
 const resumirItinerario = (itinerario, pronostico) => {
     const lineas = itinerario.map((dia, i) => {
         const nombreDia = new Date(dia.fecha).toLocaleDateString("es-UY", { weekday: "long", timeZone: "UTC" });
@@ -130,6 +132,8 @@ const armarPlanDeViaje = async (viaje, diasHastaInicio) => {
     const fechaFin = formatearFecha(viaje.fechaFin);
     const dias = obtenerDiasDelViaje(viaje.fechaInicio, viaje.fechaFin);
 
+    // Se pasa la lista entera: armarItinerario toma solo los que necesita
+    // y así los días de lluvia encuentran museos aunque no estén entre los más cercanos
     const puntos = await getPuntosDeInteres(coordenadas.latitude, coordenadas.longitude);
 
     let pronostico = null;

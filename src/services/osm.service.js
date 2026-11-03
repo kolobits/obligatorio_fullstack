@@ -45,6 +45,7 @@ const CATEGORIAS_TURISTICAS = [
     "leisure.park",
 ];
 
+// Orden de importancia por tipo de lugar: las plazas y parques van al final
 const PRIORIDAD = {
     "tourism.attraction": 0,
     "tourism.sights": 0,
@@ -54,12 +55,14 @@ const PRIORIDAD = {
     "leisure.park": 3,
 };
 
-
+// Id de Wikidata del lugar. Solo lo tienen los lugares conocidos
 const _wikidataId = (f) => {
     const p = f.properties;
     return p.wiki_and_media?.wikidata || p.datasource?.raw?.wikidata || null;
 };
 
+// Le pide a Wikidata, de a 50 lugares, el nombre en español
+// y en cuántas Wikipedias aparece cada uno (eso usamos como "popularidad")
 const _getDatosWikidata = async (ids) => {
     const datos = {};
 
@@ -102,6 +105,7 @@ const _sinRepetidos = (features) => {
     const nombres = [];
     const ids = [];
     return features.filter((f) => {
+        // el mismo lugar puede venir dos veces (como punto y como edificio) con el mismo id de Wikidata
         const id = _wikidataId(f);
         if (id && ids.includes(id)) {
             return false;
@@ -110,11 +114,13 @@ const _sinRepetidos = (features) => {
             ids.push(id);
         }
 
-        const nombre = f.properties.name
+        // algunos lugares vienen con nombre numérico (ej: 1922), por eso String()
+        const nombre = String(f.properties.name)
             .trim()
             .toLowerCase()
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "");
+        // "Álvaro Reis" y "Praça rev. Álvaro Reis" se toman como el mismo lugar
         const yaEsta = nombres.some((n) =>
             n === nombre ||
             (Math.min(n.length, nombre.length) >= 6 && (n.includes(nombre) || nombre.includes(n)))
@@ -155,7 +161,8 @@ const getPuntosDeInteres = async (latitude, longitude, radioMetros = 8000) => {
             .map((f) => {
                 const extra = wiki[_wikidataId(f)] || {};
                 return {
-                    nombre: extra.nombreEs || f.properties.datasource?.raw?.["name:es"] || f.properties.name,
+                    // nombre en español si existe; si no, el original
+                    nombre: extra.nombreEs || f.properties.datasource?.raw?.["name:es"] || String(f.properties.name),
                     tipo: _categoriaPrincipal(f.properties.categories),
                     popularidad: extra.popularidad || 0,
                     latitude: f.properties.lat,
@@ -165,7 +172,9 @@ const getPuntosDeInteres = async (latitude, longitude, radioMetros = 8000) => {
                         : null
                 };
             })
+            // las plazas y parques que no están en ninguna Wikipedia se descartan
             .filter((l) => l.tipo !== "leisure.park" || l.popularidad > 0)
+            // primero los más famosos, después por tipo y al final por distancia
             .sort((a, b) =>
                 (b.popularidad - a.popularidad) ||
                 ((PRIORIDAD[a.tipo] ?? 4) - (PRIORIDAD[b.tipo] ?? 4)) ||
