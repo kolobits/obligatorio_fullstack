@@ -35,7 +35,6 @@ const getCoordenadasOSM = async (lugar) => {
     };
 };
 
-
 const CATEGORIAS_TURISTICAS = [
     "entertainment.museum",
     "entertainment.culture",
@@ -45,7 +44,13 @@ const CATEGORIAS_TURISTICAS = [
     "leisure.park",
 ];
 
-// Orden de importancia por tipo de lugar: las plazas y parques van al final
+const GRUPOS_BUSQUEDA = [
+    { categorias: "tourism.attraction", limite: 100 },
+    { categorias: "tourism.sights", limite: 150 },
+    { categorias: "entertainment.museum,entertainment.culture", limite: 100 },
+    { categorias: "leisure.park", limite: 50 },
+];
+
 const PRIORIDAD = {
     "tourism.attraction": 0,
     "tourism.sights": 0,
@@ -55,20 +60,18 @@ const PRIORIDAD = {
     "leisure.park": 3,
 };
 
-// Id de Wikidata del lugar. Solo lo tienen los lugares conocidos
 const _wikidataId = (f) => {
     const p = f.properties;
     return p.wiki_and_media?.wikidata || p.datasource?.raw?.wikidata || null;
 };
 
-// Le pide a Wikidata, de a 50 lugares, el nombre en español
-// y en cuántas Wikipedias aparece cada uno (eso usamos como "popularidad")
 const _getDatosWikidata = async (ids) => {
-    const datos = {};
-
+    const grupos = [];
     for (let i = 0; i < ids.length; i += 50) {
-        const grupo = ids.slice(i, i + 50);
+        grupos.push(ids.slice(i, i + 50));
+    }
 
+    const respuestas = await Promise.all(grupos.map(async (grupo) => {
         try {
             const { data } = await axios.get(WIKIDATA_ENDPOINT, {
                 params: {
@@ -81,20 +84,29 @@ const _getDatosWikidata = async (ids) => {
                 headers: { "User-Agent": "PlanificadorViajesORT/1.0 (proyecto universitario)" },
                 timeout: 15000
             });
-
-            Object.entries(data.entities || {}).forEach(([id, entidad]) => {
-                datos[id] = {
-                    nombreEs: entidad.labels?.es?.value || null,
-                    popularidad: Object.keys(entidad.sitelinks || {}).length
-                };
-            });
+            return data.entities || {};
         } catch (error) {
             console.error("Error al consultar Wikidata:", error.message);
+            return {};
         }
-    }
+    }));
+
+    const datos = {};
+    respuestas.forEach((entidades) => {
+        Object.entries(entidades).forEach(([id, entidad]) => {
+            datos[id] = {
+                nombreEs: entidad.labels?.es?.value || null,
+                popularidad: Object.keys(entidad.sitelinks || {}).length
+            };
+        });
+    });
 
     return datos;
 };
+
+const _esMonumentoMenor = (categorias = []) =>
+    !categorias.includes("tourism.attraction") &&
+    categorias.some((c) => c.startsWith("tourism.sights.memorial"));
 
 const _categoriaPrincipal = (categorias = []) => {
     const principal = CATEGORIAS_TURISTICAS.find((categoria) => categorias.includes(categoria));
@@ -105,7 +117,6 @@ const _sinRepetidos = (features) => {
     const nombres = [];
     const ids = [];
     return features.filter((f) => {
-        // el mismo lugar puede venir dos veces (como punto y como edificio) con el mismo id de Wikidata
         const id = _wikidataId(f);
         if (id && ids.includes(id)) {
             return false;
@@ -114,13 +125,11 @@ const _sinRepetidos = (features) => {
             ids.push(id);
         }
 
-        // algunos lugares vienen con nombre numérico (ej: 1922), por eso String()
         const nombre = String(f.properties.name)
             .trim()
             .toLowerCase()
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "");
-        // "Álvaro Reis" y "Praça rev. Álvaro Reis" se toman como el mismo lugar
         const yaEsta = nombres.some((n) =>
             n === nombre ||
             (Math.min(n.length, nombre.length) >= 6 && (n.includes(nombre) || nombre.includes(n)))
@@ -133,25 +142,35 @@ const _sinRepetidos = (features) => {
     });
 };
 
-const getPuntosDeInteres = async (latitude, longitude, radioMetros = 8000) => {
+const _buscarGrupo = async (grupo, latitude, longitude, radioMetros) => {
     try {
         const { data } = await axios.get(GEOAPIFY_ENDPOINT, {
             params: {
-                categories: CATEGORIAS_TURISTICAS.join(","),
+                categories: grupo.categorias,
                 filter: `circle:${longitude},${latitude},${radioMetros}`,
                 bias: `proximity:${longitude},${latitude}`,
-                limit: 500,
+                limit: grupo.limite,
                 apiKey: process.env.GEOAPIFY_API_KEY
             },
             timeout: 15000
         });
+        return Array.isArray(data?.features) ? data.features : [];
+    } catch (error) {
+        console.error(
+            `Error al consultar Geoapify (${grupo.categorias}):`,
+            error?.response?.data || error.message
+        );
+        return [];
+    }
+};
 
-        if (!data || !Array.isArray(data.features)) {
-            console.error("Respuesta inesperada de Geoapify (puntos de interés):", data);
-            return [];
-        }
+const getPuntosDeInteres = async (latitude, longitude, radioMetros = 8000) => {
+    try {
+        const resultados = await Promise.all(
+            GRUPOS_BUSQUEDA.map((grupo) => _buscarGrupo(grupo, latitude, longitude, radioMetros))
+        );
 
-        const conNombre = data.features.filter((f) => f.properties?.name);
+        const conNombre = resultados.flat().filter((f) => f.properties?.name);
 
         const lugares = _sinRepetidos(conNombre);
         const ids = lugares.map(_wikidataId).filter((id) => id !== null);
@@ -160,11 +179,12 @@ const getPuntosDeInteres = async (latitude, longitude, radioMetros = 8000) => {
         return lugares
             .map((f) => {
                 const extra = wiki[_wikidataId(f)] || {};
+                const categorias = f.properties.categories || [];
+                const popularidad = extra.popularidad || 0;
                 return {
-                    // nombre en español si existe; si no, el original
                     nombre: extra.nombreEs || f.properties.datasource?.raw?.["name:es"] || String(f.properties.name),
-                    tipo: _categoriaPrincipal(f.properties.categories),
-                    popularidad: extra.popularidad || 0,
+                    tipo: _categoriaPrincipal(categorias),
+                    popularidad: _esMonumentoMenor(categorias) ? Math.round(popularidad / 4) : popularidad,
                     latitude: f.properties.lat,
                     longitude: f.properties.lon,
                     distanciaKm: f.properties.distance != null
@@ -172,21 +192,29 @@ const getPuntosDeInteres = async (latitude, longitude, radioMetros = 8000) => {
                         : null
                 };
             })
-            // las plazas y parques que no están en ninguna Wikipedia se descartan
             .filter((l) => l.tipo !== "leisure.park" || l.popularidad > 0)
-            // primero los más famosos, después por tipo y al final por distancia
             .sort((a, b) =>
                 (b.popularidad - a.popularidad) ||
                 ((PRIORIDAD[a.tipo] ?? 4) - (PRIORIDAD[b.tipo] ?? 4)) ||
                 ((a.distanciaKm ?? Infinity) - (b.distanciaKm ?? Infinity))
             );
     } catch (error) {
-        console.error(
-            "Error al consultar Geoapify (puntos de interés):",
-            error?.response?.data || error.message
-        );
+        console.error("Error al armar los puntos de interés:", error.message);
         return [];
     }
+};
+
+const getDistanciaEnLineaRecta = (origen, destino) => {
+    const RADIO_TIERRA_KM = 6371;
+    const aRadianes = (grados) => (grados * Math.PI) / 180;
+
+    const dLat = aRadianes(destino.latitude - origen.latitude);
+    const dLon = aRadianes(destino.longitude - origen.longitude);
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(aRadianes(origen.latitude)) * Math.cos(aRadianes(destino.latitude)) * Math.sin(dLon / 2) ** 2;
+
+    return 2 * RADIO_TIERRA_KM * Math.asin(Math.sqrt(a));
 };
 
 const getRuta = async (origen, destino) => {
@@ -248,6 +276,7 @@ const getRutaConParadas = async (puntos) => {
 
 module.exports = {
     CATEGORIAS_TURISTICAS,
+    getDistanciaEnLineaRecta,
     getCoordenadasOSM,
     getPuntosDeInteres,
     getRuta,

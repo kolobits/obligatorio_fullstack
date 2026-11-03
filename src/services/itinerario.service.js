@@ -11,7 +11,8 @@ const {
 const { askGroq, extraerTexto } = require("./groq.service");
 
 const MAX_DIAS_PRONOSTICO = 16;
-const LUGARES_POR_DIA = 2;
+const LUGARES_POR_DIA = 3;
+const CANDIDATOS_CERCANOS = 12;
 const MS_POR_DIA = 1000 * 60 * 60 * 24;
 const TIPOS_BAJO_TECHO = ["entertainment.museum", "entertainment.culture"];
 
@@ -46,33 +47,72 @@ const obtenerDiasDelViaje = (fechaInicio, fechaFin) => {
     return dias;
 };
 
+const distanciaEntre = (a, b) => {
+    const dLat = a.latitude - b.latitude;
+    const dLon = (a.longitude - b.longitude) * Math.cos((a.latitude * Math.PI) / 180);
+    return Math.sqrt(dLat * dLat + dLon * dLon) * 111;
+};
+
 const armarItinerario = (dias, lugares) => {
-    const bajoTecho = lugares.filter((lugar) => TIPOS_BAJO_TECHO.includes(lugar.tipo));
-    const aireLibre = lugares.filter((lugar) => !TIPOS_BAJO_TECHO.includes(lugar.tipo));
+    const usados = [];
+    const esBajoTecho = (lugar) => TIPOS_BAJO_TECHO.includes(lugar.tipo);
+    const esAireLibre = (lugar) => !esBajoTecho(lugar);
+    const cualquiera = () => true;
+
+    const disponibles = (condicion) => lugares.filter((l) => !usados.includes(l) && condicion(l));
+
+    const tomar = (condicion) => {
+        const lugar = disponibles(condicion)[0];
+        if (lugar) {
+            usados.push(lugar);
+        }
+        return lugar;
+    };
+
+    const tomarCercano = (ancla, condicion) => {
+        const candidatos = disponibles(condicion).slice(0, CANDIDATOS_CERCANOS);
+        if (candidatos.length === 0) {
+            return undefined;
+        }
+        let lugar = candidatos[0];
+        candidatos.forEach((c) => {
+            if (distanciaEntre(ancla, c) < distanciaEntre(ancla, lugar)) {
+                lugar = c;
+            }
+        });
+        usados.push(lugar);
+        return lugar;
+    };
+
+    const completarDia = (dia, ancla, condicion) => {
+        dia.lugares = [];
+        if (!ancla) {
+            return;
+        }
+        dia.lugares.push({ ...ancla, fecha: dia.fecha });
+        for (let i = 1; i < LUGARES_POR_DIA; i++) {
+            const lugar = tomarCercano(ancla, condicion) || tomarCercano(ancla, cualquiera);
+            if (lugar) {
+                dia.lugares.push({ ...lugar, fecha: dia.fecha });
+            }
+        }
+    };
 
     dias.forEach((dia) => {
         dia.lugares = [];
+    });
 
-        for (let i = 0; i < LUGARES_POR_DIA; i++) {
-            let lugar;
+    dias.filter((dia) => dia.lluvioso === true).forEach((dia) => {
+        completarDia(dia, tomar(esBajoTecho) || tomar(cualquiera), esBajoTecho);
+    });
 
-            if (dia.lluvioso === true) {
-                lugar = bajoTecho.shift() || aireLibre.shift();
-            } else {
-                lugar = aireLibre.shift() || bajoTecho.shift();
-            }
-
-            if (lugar) {
-                lugar.fecha = dia.fecha;
-                dia.lugares.push(lugar);
-            }
-        }
+    dias.filter((dia) => dia.lluvioso !== true).forEach((dia) => {
+        completarDia(dia, tomar(esAireLibre) || tomar(cualquiera), cualquiera);
     });
 
     return dias;
 };
 
-// Código de Open-Meteo -> texto que la IA entiende sin inventar
 const describirClima = (codigo) => {
     if (codigo === 0) return "despejado";
     if (codigo <= 3) return "parcialmente nublado";
@@ -83,8 +123,6 @@ const describirClima = (codigo) => {
     return "con tormenta";
 };
 
-// Arma el plan en texto, un renglón por día:
-// "Día 1 (miércoles): despejado, máxima 27° y mínima 22°. Lugares: Cristo Redentor (al aire libre), ..."
 const resumirItinerario = (itinerario, pronostico) => {
     const lineas = itinerario.map((dia, i) => {
         const nombreDia = new Date(dia.fecha).toLocaleDateString("es-UY", { weekday: "long", timeZone: "UTC" });
@@ -132,8 +170,6 @@ const armarPlanDeViaje = async (viaje, diasHastaInicio) => {
     const fechaFin = formatearFecha(viaje.fechaFin);
     const dias = obtenerDiasDelViaje(viaje.fechaInicio, viaje.fechaFin);
 
-    // Se pasa la lista entera: armarItinerario toma solo los que necesita
-    // y así los días de lluvia encuentran museos aunque no estén entre los más cercanos
     const puntos = await getPuntosDeInteres(coordenadas.latitude, coordenadas.longitude);
 
     let pronostico = null;
@@ -141,7 +177,7 @@ const armarPlanDeViaje = async (viaje, diasHastaInicio) => {
 
     const diasHastaFin = calcularDiasHasta(viaje.fechaFin);
 
-    if (diasHastaInicio >= 0 && diasHastaFin <= MAX_DIAS_PRONOSTICO) {
+    if (diasHastaFin >= 0 && diasHastaFin <= MAX_DIAS_PRONOSTICO) {
         try {
             pronostico = await getPronostico(
                 coordenadas.latitude,
@@ -192,7 +228,7 @@ Contale cómo viene el clima en general y destacá uno o dos días puntuales. Si
 
 ${REGLAS_PROMPT}`;
     } else {
-        prompt = `Sos un asistente de viajes. Escribile al viajero una recomendación para su viaje de ${dias.length} días a ${coordenadas.nombre}. Faltan ${diasHastaInicio} días, así que todavía no hay pronóstico: solo el promedio de los últimos ${resumenHistorico.aniosAnalizados} años para esas fechas (máxima ${Math.round(resumenHistorico.temperaturaMaximaPromedio)}°, mínima ${Math.round(resumenHistorico.temperaturaMinimaPromedio)}°, llueve el ${resumenHistorico.probabilidadDeLluvia}% de los días).
+        prompt = `Sos un asistente de viajes. Escribile al viajero una recomendación para su viaje de ${dias.length} días a ${coordenadas.nombre}. ${diasHastaInicio > 0 ? `Faltan ${diasHastaInicio} días` : "El viaje ya empezó pero dura más de lo que cubre el pronóstico"}, así que no hay pronóstico exacto: solo el promedio de los últimos ${resumenHistorico.aniosAnalizados} años para esas fechas (máxima ${Math.round(resumenHistorico.temperaturaMaximaPromedio)}°, mínima ${Math.round(resumenHistorico.temperaturaMinimaPromedio)}°, llueve el ${resumenHistorico.probabilidadDeLluvia}% de los días).
 
 Plan día por día (ya está decidido):
 ${asignacion}
@@ -204,12 +240,24 @@ ${REGLAS_PROMPT}`;
 
     const recomendacion = await pedirRecomendacionIA(prompt);
 
-    let recorrido = null;
+    for (const dia of itinerario) {
+        dia.recorrido = dia.lugares.length > 1 ? await getRutaConParadas(dia.lugares) : null;
+    }
 
-    if (lugaresOrdenados.length > 1) {
-        const ciudad = { latitude: coordenadas.latitude, longitude: coordenadas.longitude };
-        const puntosRuta = [ciudad].concat(lugaresOrdenados);
-        recorrido = await getRutaConParadas(puntosRuta);
+    let recorrido = null;
+    const diasConRuta = itinerario.filter((dia) => dia.recorrido);
+
+    if (diasConRuta.length > 0) {
+        let distanciaKm = 0;
+        let duracionHoras = 0;
+        diasConRuta.forEach((dia) => {
+            distanciaKm += dia.recorrido.distanciaKm;
+            duracionHoras += dia.recorrido.duracionHoras;
+        });
+        recorrido = {
+            distanciaKm: Math.round(distanciaKm * 10) / 10,
+            duracionHoras: Math.round(duracionHoras * 10) / 10
+        };
     }
 
     const plan = {

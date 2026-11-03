@@ -4,7 +4,7 @@ const path = require("path");
 const logRequest = (req) => {
   const now = new Date();
   const [date] = now.toISOString().split("T");
-  const logDir = path.join(__dirname, "logs");
+  const logDir = process.env.VERCEL ? "/tmp" : path.join(__dirname, "logs");
   const logFile = path.join(logDir, `${date}.log`);
 
   const logMessage = `[${now.toISOString()}] METHOD: ${req.method} ${

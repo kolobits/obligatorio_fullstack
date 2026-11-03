@@ -14,6 +14,7 @@ const {
   getCoordenadasOSM,
   getPuntosDeInteres,
   getRuta,
+  getDistanciaEnLineaRecta,
 } = require("../services/osm.service");
 const {
   calcularDiasHasta,
@@ -21,6 +22,10 @@ const {
 } = require("../services/itinerario.service");
 
 const LIMITE_VIAJES_PLUS = 4;
+
+const DISTANCIA_MINIMA_AVION_KM = 150;
+const DISTANCIA_MAXIMA_AUTO_KM = 1500;
+const HORAS_MAXIMAS_AUTO = 8;
 
 const getViajesController = async (req, res) => {
   const { id } = req.user;
@@ -134,12 +139,13 @@ const getClimaViajeController = async (req, res) => {
       return res.status(404).json({ message: "Viaje no encontrado" });
     }
 
-    const diasHastaInicio = calcularDiasHasta(viaje.fechaInicio);
-    if (diasHastaInicio < 0) {
+    const diasHastaFin = calcularDiasHasta(viaje.fechaFin);
+    if (diasHastaFin < 0) {
       return res
         .status(400)
-        .json({ message: "El viaje ya pasó, no hay pronóstico disponible" });
+        .json({ message: "El viaje ya terminó, no hay pronóstico disponible" });
     }
+    const diasHastaInicio = calcularDiasHasta(viaje.fechaInicio);
 
     const climaGuardado = await getClimaCache(viajeId);
     if (climaGuardado) {
@@ -153,8 +159,7 @@ const getClimaViajeController = async (req, res) => {
         .json({ message: `No se encontró la ubicación "${viaje.destino}"` });
     }
 
-    // Solo guardamos en caché si la IA respondió, así se reintenta la próxima vez
-    if (plan.recomendacion) {
+    if (plan.recomendacion && plan.lugaresDestacados.length > 0) {
       await setClimaCache(viajeId, plan);
     }
 
@@ -200,17 +205,36 @@ const getDistanciaViajeController = async (req, res) => {
         .json({ message: `No se encontró el destino "${viaje.destino}"` });
     }
 
-    const resultado = await getRuta(coordenadasOrigen, coordenadasDestino);
-    if (!resultado) {
+    const lineaRecta = getDistanciaEnLineaRecta(coordenadasOrigen, coordenadasDestino);
+
+    let avion = null;
+    if (lineaRecta >= DISTANCIA_MINIMA_AVION_KM) {
+      avion = {
+        distanciaKm: Math.round(lineaRecta),
+        duracionHoras: Math.round((lineaRecta / 800 + 0.5) * 10) / 10,
+      };
+    }
+
+    let auto = null;
+    if (lineaRecta <= DISTANCIA_MAXIMA_AUTO_KM) {
+      auto = await getRuta(coordenadasOrigen, coordenadasDestino);
+    }
+
+    if (!avion && !auto) {
       return res
         .status(404)
-        .json({ message: "No se pudo calcular una ruta entre esos puntos" });
+        .json({ message: "No se pudo calcular cómo llegar entre esos puntos" });
     }
+
+    const recomendado = auto && auto.duracionHoras <= HORAS_MAXIMAS_AUTO ? "auto" : "avion";
 
     res.status(200).json({
       origen: coordenadasOrigen.nombre,
       destino: coordenadasDestino.nombre,
-      ...resultado,
+      lineaRectaKm: Math.round(lineaRecta),
+      avion,
+      auto,
+      recomendado,
     });
   } catch (error) {
     console.error(error?.response?.data || error.message);

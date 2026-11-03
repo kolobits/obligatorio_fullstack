@@ -48,6 +48,7 @@ const getPerfilController = async (req, res) => {
       id: usuario._id,
       username: usuario.username,
       perfil: usuario.perfil,
+      rol: usuario.rol,
     });
   } catch (error) {
     console.error(error);
